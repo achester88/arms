@@ -7,6 +7,7 @@ use diesel::prelude::*;
 use diesel::pg::PgConnection;
 use dotenv::dotenv;
 use actix_web::{HttpServer, App, web, HttpResponse, Responder};
+use actix_files as fs;
 use tera::{Tera, Context};
 use serde::{Serialize, Deserialize};
 use actix_identity::{Identity, CookieIdentityPolicy, IdentityService};
@@ -36,27 +37,33 @@ fn establish_connection() -> PgConnection {
         .expect(&format!("Error connecting to {}", database_url))
 }
 
-async fn index(tera: web::Data<Tera>) -> impl Responder {
-    let mut data = Context::new();
+async fn index(tera: web::Data<Tera>, id: Identity) -> impl Responder {
+    if let Some(id) = id.identity() {
+        let mut data = Context::new();
 
-    let posts = [
-        Post {
-            title: String::from("This is the first link"),
-            link: String::from("https://example.com"),
-            author: String::from("Bob")
-        },
-        Post {
-            title: String::from("The Second Link"),
-            link: String::from("https://example.com"),
-            author: String::from("Alice")
-        },
-    ];
+        let posts = [
+            Post {
+                title: String::from("Name1"),
+                link: String::from("/members/name1"),
+                author: String::from("")
+            },
+            Post {
+                title: String::from("Name2"),
+                link: String::from("/members/name2"),
+                author: String::from("")
+            },
+        ];
     
-    data.insert("title", "ARMS Portal");
-    data.insert("posts", &posts);
+        data.insert("title", "ARMS Portal");
+        data.insert("posts", &posts);
+        data.insert("username", &id);
 
-    let rendered = tera.render("index.html", &data).unwrap();
-    HttpResponse::Ok().body(rendered)
+        let rendered = tera.render("index.html", &data).unwrap();
+        return HttpResponse::Ok().body(rendered);
+    }
+
+    return HttpResponse::PermanentRedirect().set_header("Location", "/login").body("");
+    let mut data = Context::new(); 
 }
 
 async fn signup(tera: web::Data<Tera>) -> impl Responder {
@@ -85,9 +92,10 @@ async fn process_signup(data: web::Form<NewUser>) -> impl Responder {
 async fn login(tera: web::Data<Tera>, id: Identity) -> impl Responder {
     let mut data = Context::new();
     data.insert("title", "Login");
+    data.insert("name", "login");
 
     if let Some(id) = id.identity() {
-        return HttpResponse::Ok().body("Already logged in.")
+        return HttpResponse::PermanentRedirect().set_header("Location", "/").body("redircting to /");
     }
 
     let rendered = tera.render("login.html", &data).unwrap();
@@ -106,7 +114,8 @@ async fn process_login(data: web::Form<NewUser>, id: Identity) -> impl Responder
             if u.password == data.password {
                 let session_token = String::from(u.username);
                 id.remember(session_token);
-                HttpResponse::Ok().body(format!("Logged in: {}", data.username))
+                //HttpResponse::Ok().body(format!("Logged in: {}", data.username))
+                return HttpResponse::PermanentRedirect().set_header("Location", "/login").body("redircting to /");
             } else {
                 HttpResponse::Ok().body("Password is incorrect.")
             }
@@ -140,7 +149,7 @@ async fn logout(id: Identity) -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
-        let tera = Tera::new("templates/**/*").unwrap();
+        let mut tera = Tera::new("templates/**/*").unwrap();
         App::new()
             .wrap(IdentityService::new(
                     CookieIdentityPolicy::new(&[0;32])
@@ -149,8 +158,9 @@ async fn main() -> std::io::Result<()> {
                 )
             )
             .data(tera)
+            //.service(fs::Files::new("/static", ".").show_files_listing())
             .route("/", web::get().to(index))
-
+            //.service(web::redirect("/", "https://duck.com"))
             .route("/signup", web::get().to(signup))
             .route("/signup", web::post().to(process_signup))
 
