@@ -7,3 +7,6 @@ edition = "2021"
 actix-web = "3"
 tera = "1.5.0"
 serde = "1.0"
+dotenv = "0.15.0"
+diesel = { version = "1.4.4", features = ["postgres"] }
+actix-identity = "0.3.1"
